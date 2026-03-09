@@ -1,7 +1,7 @@
 
 #include <ESP8266WiFi.h>
 
-// SNIFFUS v1.0 by ROSPUTINUS- 
+// SNIFFUS v1.0 ESP8266 by ROSPUTINUS- 
  signed rssi: 8;
  unsigned rate: 4;
  unsigned is_group: 1;
