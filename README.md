@@ -3,10 +3,10 @@
    --SNIFFUS-- is an advanced real-time wireless network analysis tool. It combines the power of the **ESP8266** microcontroller with a modern web interface built on the **Web Serial API**.
 
 ![Interface Preview](SNIFFUS.png)
-![Interface Preview](SERIAL PORT USB.png)
+![Interface Preview](SERIAL.png)
 ![Interface Preview](RELATIONS.png)
 ![Interface Preview](HISTORY..png)
-![Interface Preview](DUMP TXT.png)
+![Interface Preview](DUMP.png)
 
 
 --- Key Features
