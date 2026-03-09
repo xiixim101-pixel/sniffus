@@ -1,4 +1,4 @@
-                           SNIFFUS v1.0 - WiFi Network Analyzer
+                           SNIFFUS v1.0 - ESP8266 WiFi Network Analyzer
 
    --SNIFFUS-- is an advanced real-time wireless network analysis tool. It combines the power of the **ESP8266** microcontroller with a modern web interface built on the **Web Serial API**.
 
