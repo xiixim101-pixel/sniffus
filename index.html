@@ -1,0 +1,325 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SNIFFUS v1.0 - NETWORK ANALYZER</title>
+    <style>
+        :root { --neon: #0f0; --blue: #00d2ff; --warn: #ffcc00; --bg: #050505; --target: #ff0000; --MOSO: #d86dde; }
+        body, html { background: var(--bg); color: #ccc; font-family: 'Consolas', monospace; margin: 0; height: 100vh; overflow: hidden; }
+        
+        #main-container { display: flex; flex-direction: column; height: 100vh; }
+        .top-bar { background: #111; padding: 10px 20px; display: flex; align-items: center; gap: 20px; border-bottom: 1px solid #333; font-size: 12px; height: 50px; box-sizing: border-box; }
+        #status { color: var(--neon); font-weight: bold; }
+        
+        .grid { display: grid; grid-template-columns: 1fr 1fr; flex: 1; overflow: hidden; }
+        .panel { border-right: 1px solid #222; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+        .panel-header { background: #1a1a1a; padding: 8px 15px; font-size: 11px; color: #888; display: flex; justify-content: space-between; border-bottom: 1px solid #333; }
+        
+        .content { flex: 1; overflow-y: scroll; padding: 5px; height: 100%; scrollbar-width: thin; scrollbar-color: #333 transparent; }
+        .content::-webkit-scrollbar { width: 6px; }
+        .content::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        
+        /* ZAGĘSZCZONE KARTY */
+        .card { background: #0a0a0a; border: 1px solid #222; padding: 4px 10px; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; position: relative; cursor: pointer; transition: 0.2s; min-height: 42px; box-sizing: border-box; }
+        .card:hover { border-color: #444; background: #111; }
+        .card.online { border-left: 3px solid var(--neon); opacity: 1; }
+        .card.offline { border-left: 3px solid #333; opacity: 0.6; }
+        
+        .card.targeted { 
+
+            background: #1a0000;
+            opacity: 1 !important;
+        }
+        
+        .ssid { font-weight: bold; color: #fff; font-size: 12px; margin-bottom: 1px; line-height: 1.1; }
+        .mac { font-size: 9px; color: #e00404; font-family: 'Courier New'; }
+        .ch-box { background: var(--MOSO); color: #000; font-size: 9px; padding: 1px 4px; font-weight: bold; min-width: 30px; text-align: center; }
+        .sta-count { color: var(--warn); font-size: 9px; margin-left: 5px; }
+
+        .sig-container { display: flex; align-items: flex-end; gap: 2px; height: 12px; justify-content: center; }
+        .sig-bar { width: 3px; background: #222; border-radius: 1px; }
+        .sig-bar.active { background: var(--neon); box-shadow: 0 0 5px var(--neon); }
+        .blue-sig .sig-bar.active { background: var(--blue); box-shadow: 0 0 5px var(--blue); }
+
+        #modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 500px; background: #000; border: 1px solid var(--blue); padding: 20px; z-index: 1000; box-shadow: 0 0 100px #000; }
+        .overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index: 999; }
+        button { background: var(--neon); color: #000; border: none; padding: 6px 15px; font-weight: bold; cursor: pointer; border-radius: 2px; font-family: 'Consolas';}
+        input { background: #111; border: 1px solid #333; color: #fff; padding: 10px; width: 100%; box-sizing: border-box; margin: 10px 0; outline: none; }
+        
+        .conn-item { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; border-bottom: 1px solid #111; }
+        .time-label { font-size: 9px; color: var(--blue); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="main-container">
+    <div class="top-bar">
+        <button onclick="connect()">CONNECT USB</button>
+        <button onclick="downloadLogs()" style="background:var(--blue); color:black">DUMP TXT</button>
+        <div id="status">READY</div>
+        <div style="margin-left:auto;">
+            MEM: <b id="mem-usage" style="color:var(--warn)">0MB</b> | 
+            APS: <b id="count-ap">0</b> | TRACED: <b id="count-pr">0</b>
+            <button onclick="clearAll()" style="background:#400; color:#fff; margin-left:15px; font-size:10px;">PURGE DB</button>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="panel">
+            <div class="panel-header">NETWORK RADAR (AP) <span>RIGHT CLICK = RELATIONS  -  LEFT CLICK = HISTORY</span></div>
+            <div class="content" id="radar-list"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">CLIENTS (STA) <span>TARGET ON TOP</span></div>
+            <div class="content" id="probe-list"></div>
+        </div>
+    </div>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeModal()"></div>
+<div id="modal">
+    <h3 id="m-mac" style="color:var(--blue); margin-top:0;"></h3>
+    <input type="text" id="alias-input" placeholder="Set alias...">
+    <button onclick="saveAlias()" style="width:100%">SAVE TO DATABASE</button>
+    <div id="connections-box" style="margin-top:15px; max-height:150px; overflow-y:auto; border-top:1px solid var(--blue); padding-top:10px;"></div>
+    <div id="history-box" style="margin-top:15px; max-height:150px; overflow-y:auto; border-top:1px solid #333; padding-top:10px;"></div>
+    <button onclick="closeModal()" style="margin-top:10px; background:#222; color:#fff; width:100%">CLOSE</button>
+</div>
+
+<script>
+    let port, reader;
+    let db = JSON.parse(localStorage.getItem('SNIFFUS v1.0_db')) || { aps: {}, probes: {}, aliases: {} };
+    let activeMac = null;
+    let lastUpdate = 0;
+    let selectedTargetMac = null; 
+    let selectedSSID = null;      
+
+    function getSignalHTML(rssi, isBlue = false) {
+        let count = Math.min(5, Math.max(1, Math.floor((rssi + 100) / 10)));
+        let bars = "";
+        for (let i = 1; i <= 5; i++) bars += `<div class="sig-bar ${i <= count ? 'active' : ''}" style="height:${i * 2.5}px"></div>`;
+        return `<div class="sig-container ${isBlue?'blue-sig':''}" title="${rssi} dBm">${bars}</div>`;
+    }
+
+    async function connect() {
+        try {
+            port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 115200 });
+            document.getElementById('status').innerText = "LIVE";
+            const decoder = new TextDecoderStream();
+            port.readable.pipeTo(decoder.writable);
+            reader = decoder.readable.getReader();
+            readLoop();
+        } catch (e) { alert("Port error."); }
+    }
+
+    async function readLoop() {
+        let buf = "";
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += value;
+            let lines = buf.split("\n");
+            for (let i = 0; i < lines.length - 1; i++) parse(lines[i].trim());
+            buf = lines[lines.length - 1];
+        }
+    }
+
+    function parse(line) {
+        const now = Date.now();
+        const time = new Date().toLocaleTimeString();
+        if (line.startsWith("R:")) {
+            const [ssid, mac, chan, rssi] = line.substring(2).split("|");
+            if(mac) {
+                const m = mac.toLowerCase().replace(/:/g,'');
+                if(!db.aps[m]) db.aps[m] = { ssid: ssid || "HIDDEN", chan: parseInt(chan), rssi: parseInt(rssi), last: now, time: time, maxSta: 0, fixedClients: [] };
+                db.aps[m].rssi = parseInt(rssi);
+                db.aps[m].last = now;
+                db.aps[m].time = time;
+                if(ssid && ssid !== "HIDDEN") db.aps[m].ssid = ssid;
+            }
+        } 
+        else if (line.startsWith("P:") || line.startsWith("L:")) {
+            const parts = line.substring(2).split("|");
+            let mac, ssid = null, bssid = null, rssi;
+            if(line.startsWith("P:")) { [mac, ssid, rssi] = parts; } 
+            else { [bssid, mac, rssi] = parts; bssid = bssid.toLowerCase().replace(/:/g,''); }
+            if(!mac) return;
+            const m = mac.toLowerCase().replace(/:/g,'');
+            
+            if (!db.probes[m]) db.probes[m] = { history: [], last: 0, rssi: 0, activeBssid: null, time: "" };
+            db.probes[m].last = now;
+            db.probes[m].time = time;
+            db.probes[m].rssi = parseInt(rssi);
+            
+            if(bssid && bssid !== "ffffffffffff") {
+                db.probes[m].activeBssid = bssid;
+                if(db.aps[bssid]) {
+                    if(!db.aps[bssid].fixedClients) db.aps[bssid].fixedClients = [];
+                    if(!db.aps[bssid].fixedClients.includes(m)) db.aps[bssid].fixedClients.push(m);
+                }
+            }
+            if (ssid && ssid !== "NULL" && ssid.length > 1) {
+                if(!db.probes[m].history.some(h => h.q === ssid)) db.probes[m].history.push({ q: ssid, t: time });
+                Object.entries(db.aps).forEach(([apMac, apData]) => {
+                    if(apData.ssid === ssid) {
+                        if(!apData.fixedClients) apData.fixedClients = [];
+                        if(!apData.fixedClients.includes(m)) apData.fixedClients.push(m);
+                    }
+                });
+            }
+        }
+        if(now - lastUpdate > 800) { updateUI(); saveDB(); lastUpdate = now; }
+    }
+
+    function getStaStats(bssid, ssidName) {
+        const now = Date.now();
+        let current = 0;
+        let totalSet = new Set(db.aps[bssid]?.fixedClients || []);
+        Object.entries(db.probes).forEach(([mac, data]) => {
+            const matchesBssid = data.activeBssid === bssid;
+            const matchesSsid = ssidName && ssidName !== "HIDDEN" && data.history.some(h => h.q === ssidName);
+            if (matchesBssid || matchesSsid) { totalSet.add(mac); if (now - data.last < 30000) current++; }
+        });
+        if (!db.aps[bssid].maxSta || totalSet.size > db.aps[bssid].maxSta) db.aps[bssid].maxSta = totalSet.size;
+        return { current, max: db.aps[bssid].maxSta };
+    }
+
+    function toggleSelect(mac, ssid) {
+        if(selectedTargetMac === mac) { selectedTargetMac = null; selectedSSID = null; }
+        else { selectedTargetMac = mac; selectedSSID = (ssid === "HIDDEN" || !ssid) ? null : ssid; }
+        updateUI();
+    }
+
+    function updateUI() {
+        const now = Date.now();
+        document.getElementById('radar-list').innerHTML = Object.entries(db.aps)
+            .sort((a, b) => {
+                const aOn = (now - a[1].last) < 40000;
+                const bOn = (now - b[1].last) < 40000;
+                if (aOn !== bOn) return bOn - aOn;
+                return b[1].rssi - a[1].rssi;
+            })
+            .map(([mac, d]) => {
+                const stats = getStaStats(mac, d.ssid);
+                return `
+                <div class="card ${(now - d.last) < 40000 ? 'online' : 'offline'} ${selectedTargetMac === mac ? 'targeted' : ''}" 
+                     onclick="toggleSelect('${mac}', '${d.ssid}')" 
+                     oncontextmenu="event.preventDefault(); openModal('${mac}')">
+                    <div class="ch-box">CH:${d.chan}</div>
+                    ${getSignalHTML(d.rssi)}
+                    <div style="overflow:hidden">
+                        <div class="ssid">${d.ssid} <span class="sta-count">(STA: ${stats.current}/${stats.max})</span></div>
+                        <div class="mac">${mac}</div>
+                    </div>
+                    <div class="time-label" style="margin-left:auto">${d.time}</div>
+                </div>`}).join('');
+
+        const trackedStas = Object.entries(db.probes).filter(([mac, d]) => 
+            d.history.length > 0 || db.aliases[mac] || (d.activeBssid && db.aps[d.activeBssid]) || (selectedTargetMac && db.aps[selectedTargetMac]?.fixedClients?.includes(mac))
+        );
+
+        document.getElementById('probe-list').innerHTML = trackedStas
+            .sort((a, b) => {
+                const aMatched = (a[0] === selectedTargetMac) || (selectedTargetMac && db.aps[selectedTargetMac]?.fixedClients?.includes(a[0]));
+                const bMatched = (b[0] === selectedTargetMac) || (selectedTargetMac && db.aps[selectedTargetMac]?.fixedClients?.includes(b[0]));
+                if (aMatched !== bMatched) return bMatched - aMatched;
+                return b[1].last - a[1].last;
+            })
+            .map(([mac, d]) => {
+                const isOn = (now - d.last) < 30000;
+                const isMatched = (mac === selectedTargetMac) || (selectedTargetMac && db.aps[selectedTargetMac]?.fixedClients?.includes(mac));
+                let info = d.history.length ? `SEARCHING: ${d.history[d.history.length-1].q}` : "";
+                if(d.activeBssid && db.aps[d.activeBssid]) info = `<b style="color:var(--neon)">LINK -> ${db.aps[d.activeBssid].ssid}</b>`;
+                return `
+                <div class="card ${isOn ? 'online' : 'offline'} ${isMatched ? 'targeted' : ''}" 
+                     onclick="toggleSelect('${mac}', null)"
+                     oncontextmenu="event.preventDefault(); openModal('${mac}')">
+                    <div class="ch-box" style="background:#111; color:#777; font-size:8px;">${d.time || 'SCAN'}</div>
+                    ${getSignalHTML(d.rssi, true)}
+                    <div style="overflow:hidden">
+                        <div class="ssid" style="color:var(--blue)">${db.aliases[mac] || mac}</div>
+                        <div class="mac">${info}</div>
+                    </div>
+                    <div class="time-label" style="margin-left:auto">${isOn ? 'LIVE' : 'OFFLINE'}</div>
+                </div>`;
+            }).join('');
+
+        document.getElementById('count-ap').innerText = Object.keys(db.aps).length;
+        document.getElementById('count-pr').innerText = trackedStas.length;
+        if (performance.memory) document.getElementById('mem-usage').innerText = (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + "MB";
+    }
+
+    function openModal(mac) {
+        activeMac = mac; const now = Date.now();
+        document.getElementById('m-mac').innerText = mac;
+        document.getElementById('alias-input').value = db.aliases[mac] || "";
+        let connHtml = `<b style="color:var(--blue)">ASSOCIATED DEVICES (STATIC):</b><br><br>`;
+        let found = false;
+        if(db.aps[mac] && db.aps[mac].fixedClients) {
+            db.aps[mac].fixedClients.forEach(sMac => {
+                found = true; const data = db.probes[sMac];
+                const status = (data && now - data.last < 30000) ? `<span style="color:var(--neon)">LIVE</span>` : `<span style="color:#555">OFFLINE</span>`;
+                connHtml += `<div class="conn-item"><span>${db.aliases[sMac] || sMac}</span><span>${status}</span></div>`;
+            });
+        }
+        if(!found) connHtml += `<div style="color:#444; font-size:10px;">No static associations.</div>`;
+        document.getElementById('connections-box').innerHTML = connHtml;
+        let h = `<b style="color:var(--neon)">PROBE LOGS:</b><br><br>`;
+        if(db.probes[mac]) { h += db.probes[mac].history.slice().reverse().map(i => `<div class="conn-item"><span>[${i.t}]</span><span>${i.q}</span></div>`).join(''); }
+        document.getElementById('history-box').innerHTML = h;
+        document.getElementById('modal').style.display = 'block';
+        document.getElementById('overlay').style.display = 'block';
+    }
+
+    function saveAlias() { db.aliases[activeMac] = document.getElementById('alias-input').value.trim(); saveDB(); updateUI(); closeModal(); }
+    function closeModal() { document.getElementById('modal').style.display = 'none'; document.getElementById('overlay').style.display = 'none'; }
+    function saveDB() { localStorage.setItem('SNIFFUS v1.0_db', JSON.stringify(db)); }
+    function clearAll() { if(confirm("CLEAR DATABASE?")) { localStorage.clear(); location.reload(); } }
+    
+    function downloadLogs() {
+        let txt = `==================================================\n`;
+        txt += `   SNIFFUS v1.0 - NETWORK ANALYSIS REPORT\n`;
+        txt += `   Generated: ${new Date().toLocaleString()}\n`;
+        txt += `==================================================\n\n`;
+
+        txt += `[1] NETWORK RADAR (AP) & ASSOCIATED CLIENTS\n`;
+        txt += `--------------------------------------------------\n`;
+        Object.entries(db.aps).forEach(([mac, data]) => {
+            txt += `ACCESS POINT: ${data.ssid}\n`;
+            txt += `BSSID: ${mac} | CH: ${data.chan} | Last seen: ${data.time}\n`;
+            txt += `STATIC CLIENTS (STA):\n`;
+            if (data.fixedClients && data.fixedClients.length > 0) {
+                data.fixedClients.forEach(sMac => {
+                    const alias = db.aliases[sMac] ? ` (${db.aliases[sMac]})` : "";
+                    txt += `  -> ${sMac}${alias}\n`;
+                });
+            } else {
+                txt += `  (No static associations)\n`;
+            }
+            txt += `\n`;
+        });
+
+        txt += `\n[2] PROBE REQUEST HISTORY (MAC -> SSID)\n`;
+        txt += `--------------------------------------------------\n`;
+        Object.entries(db.probes).forEach(([mac, data]) => {
+            if (data.history && data.history.length > 0) {
+                const alias = db.aliases[mac] ? ` [ALIAS: ${db.aliases[mac]}]` : "";
+                txt += `DEVICE: ${mac}${alias}\n`;
+                data.history.forEach(h => {
+                    txt += `  [${h.t}] Searched for: ${h.q}\n`;
+                });
+                txt += `--------------------------------------------------\n`;
+            }
+        });
+
+        const blob = new Blob([txt], {type: 'text/plain'});
+        const a = document.createElement('a'); 
+        a.download = `SNIFFUS v1.0_report_${new Date().getTime()}.txt`; 
+        a.href = URL.createObjectURL(blob); 
+        a.click();
+    }
+    window.onload = updateUI;
+</script>
+</body>
+</html>
